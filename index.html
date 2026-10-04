@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tech Circuit Guide | Engineering & Electronics Documentation</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; background: #ffffff; }
+    h1 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 24px; }
+    h2 { color: #1e293b; margin-top: 36px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
+    p { margin: 14px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    th, td { border: 1px solid #cbd5e1; padding: 12px 16px; text-align: left; }
+    th { background: #f8fafc; font-weight: 600; }
+    pre { background: #0f172a; color: #f8fafc; padding: 18px; border-radius: 8px; overflow-x: auto; font-size: 14px; font-family: Consolas, Monaco, monospace; }
+    code { font-family: Consolas, Monaco, monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+    pre code { background: none; padding: 0; color: inherit; }
+  </style>
+</head>
+<body>
+  <h1>Tech Circuit Guide</h1>
+  <p>Practical engineering documentation, wiring standards, and verified code implementations.</p>
+
+  <h2>How to Connect and Blink an External LED with ESP32</h2>
+  <p>Wiring an external LED to an ESP32 board using a 330&Omega; current-limiting resistor on GPIO 23.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Component Pin</th>
+        <th>ESP32 Connection</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>LED Cathode (Short leg / Flat side)</td>
+        <td>ESP32 GND</td>
+      </tr>
+      <tr>
+        <td>LED Anode (Long leg)</td>
+        <td>330&Omega; Resistor &rarr; ESP32 GPIO 23</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Arduino IDE / C++ Verification Sketch</h3>
+  <pre><code>const int ledPin = 23;
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(ledPin, HIGH);
+  delay(1000);
+  digitalWrite(ledPin, LOW);
+  delay(1000);
+}</code></pre>
+</body>
+</html>
