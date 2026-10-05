@@ -3,58 +3,143 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tech Circuit Guide | Engineering & Electronics Documentation</title>
+  <title>ESP32 LED Blink Guide | Tech Circuit Guide</title>
+  <meta name="description" content="Technical documentation and wiring guide for connecting and controlling an external LED using the ESP32 microcontroller.">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; background: #ffffff; }
-    h1 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 24px; }
-    h2 { color: #1e293b; margin-top: 36px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
-    p { margin: 14px 0; }
-    table { width: 100%; border-collapse: collapse; margin: 24px 0; }
-    th, td { border: 1px solid #cbd5e1; padding: 12px 16px; text-align: left; }
-    th { background: #f8fafc; font-weight: 600; }
-    pre { background: #0f172a; color: #f8fafc; padding: 18px; border-radius: 8px; overflow-x: auto; font-size: 14px; font-family: Consolas, Monaco, monospace; }
-    code { font-family: Consolas, Monaco, monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
-    pre code { background: none; padding: 0; color: inherit; }
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --border: #334155;
+      --code-bg: #0b1120;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; line-height: 1.6; color: var(--text); background: var(--bg); display: flex; flex-direction: column; min-height: 100vh; }
+    
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+    .brand { font-size: 1.25rem; font-weight: 700; color: var(--primary); text-decoration: none; }
+    .brand span { color: var(--text); }
+    
+    .container { display: flex; flex: 1; max-width: 1400px; margin: 0 auto; width: 100%; }
+    
+    nav.sidebar { width: 260px; background: var(--surface); border-right: 1px solid var(--border); padding: 24px 16px; flex-shrink: 0; height: calc(100vh - 65px); position: sticky; top: 65px; overflow-y: auto; }
+    .category-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 12px; font-weight: 600; }
+    .sidebar ul { list-style: none; margin-bottom: 24px; }
+    .sidebar li { margin-bottom: 6px; }
+    .sidebar a { color: var(--text-muted); text-decoration: none; font-size: 0.95rem; display: block; padding: 6px 12px; border-radius: 6px; transition: all 0.2s; }
+    .sidebar a:hover, .sidebar a.active { color: var(--primary); background: rgba(56, 189, 248, 0.1); font-weight: 500; }
+    
+    main.content { flex: 1; padding: 40px; max-width: 900px; }
+    h1 { font-size: 2rem; margin-bottom: 12px; color: #fff; }
+    p.lead { font-size: 1.1rem; color: var(--text-muted); margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+    h2 { font-size: 1.4rem; margin: 32px 0 16px; color: var(--primary); }
+    p { margin-bottom: 16px; color: #cbd5e1; }
+    
+    table { width: 100%; border-collapse: collapse; margin: 24px 0; background: var(--surface); border-radius: 8px; overflow: hidden; }
+    th, td { border: 1px solid var(--border); padding: 12px 16px; text-align: left; }
+    th { background: rgba(255, 255, 255, 0.03); color: var(--primary); font-weight: 600; }
+    
+    .code-container { position: relative; margin: 24px 0; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .code-header { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.03); padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted); }
+    .copy-btn { background: var(--border); border: none; color: var(--text); padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; }
+    .copy-btn:hover { background: var(--primary); color: #000; }
+    pre { padding: 16px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.9rem; line-height: 1.5; color: #e2e8f0; }
+    code { font-family: inherit; }
+    
+    @media (max-width: 768px) {
+      .container { flex-direction: column; }
+      nav.sidebar { width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); }
+      main.content { padding: 24px 16px; }
+    }
   </style>
 </head>
 <body>
-  <h1>Tech Circuit Guide</h1>
-  <p>Practical engineering documentation, wiring standards, and verified code implementations.</p>
 
-  <h2>How to Connect and Blink an External LED with ESP32</h2>
-  <p>Wiring an external LED to an ESP32 board using a 330&Omega; current-limiting resistor on GPIO 23.</p>
+  <header>
+    <a href="/" class="brand">TechCircuit<span>Guide</span></a>
+    <div><a href="https://github.com/magandahakimu21-rgb/techcircuitguide" target="_blank" style="color: var(--text-muted); text-decoration: none; font-size: 0.9rem;">GitHub</a></div>
+  </header>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Component Pin</th>
-        <th>ESP32 Connection</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>LED Cathode (Short leg / Flat side)</td>
-        <td>ESP32 GND</td>
-      </tr>
-      <tr>
-        <td>LED Anode (Long leg)</td>
-        <td>330&Omega; Resistor &rarr; ESP32 GPIO 23</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="container">
+    <nav class="sidebar">
+      <div class="category-title">ESP32 Core</div>
+      <ul>
+        <li><a href="/" class="active">ESP32 LED Blink</a></li>
+        <li><a href="#pinout">Pinout & Protection</a></li>
+        <li><a href="#code">Arduino C++ Code</a></li>
+      </ul>
 
-  <h3>Arduino IDE / C++ Verification Sketch</h3>
-  <pre><code>const int ledPin = 23;
+      <div class="category-title">Upcoming Guides</div>
+      <ul>
+        <li><a href="#" style="opacity: 0.5; pointer-events: none;">ESP32 PWM Dimming</a></li>
+        <li><a href="#" style="opacity: 0.5; pointer-events: none;">Relay Module Interfacing</a></li>
+        <li><a href="#" style="opacity: 0.5; pointer-events: none;">OLED Display (I2C)</a></li>
+      </ul>
+    </nav>
+
+    <main class="content">
+      <h1>Connecting and Blinking an External LED with ESP32</h1>
+      <p class="lead">Step-by-step schematic pinout, current-limiting resistor calculations, and verified Arduino C++ verification code.</p>
+
+      <h2 id="pinout">Hardware Connections</h2>
+      <p>The ESP32 operates at 3.3V logic. Always place a current-limiting resistor (220&Omega; to 330&Omega;) in series with the LED to prevent pulling excessive current from the GPIO pin.</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Component Pin</th>
+            <th>ESP32 Connection</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>LED Cathode (-)</td>
+            <td>GND</td>
+            <td>Shorter lead / flat edge of the plastic case</td>
+          </tr>
+          <tr>
+            <td>LED Anode (+)</td>
+            <td>330&Omega; Resistor &rarr; GPIO 23</td>
+            <td>Longer lead connected via current-limiting resistor</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="code">Arduino IDE / C++ Verification Sketch</h2>
+      <div class="code-container">
+        <div class="code-header">
+          <span>ESP32_Blink.ino</span>
+          <button class="copy-btn" onclick="copyCode()">Copy Code</button>
+        </div>
+        <pre><code id="sketch-code">const int ledPin = 23;
 
 void setup() {
+  // Initialize GPIO 23 as an output
   pinMode(ledPin, OUTPUT);
 }
 
 void loop() {
-  digitalWrite(ledPin, HIGH);
-  delay(1000);
-  digitalWrite(ledPin, LOW);
-  delay(1000);
+  digitalWrite(ledPin, HIGH); // Turn the LED on
+  delay(1000);                // Wait 1 second
+  digitalWrite(ledPin, LOW);  // Turn the LED off
+  delay(1000);                // Wait 1 second
 }</code></pre>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    function copyCode() {
+      const code = document.getElementById('sketch-code').innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.innerText = 'Copied!';
+        setTimeout(() => { btn.innerText = 'Copy Code'; }, 2000);
+      });
+    }
+  </script>
 </body>
 </html>
