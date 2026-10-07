@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 OLED Display (I2C) Guide | TechCircuitGuide</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 12px; }
+    nav a { color: #38bdf8; text-decoration: none; margin-right: 15px; font-weight: bold; }
+    h1 { color: #f8fafc; font-size: 1.8rem; margin-top: 20px; }
+    h2 { color: #38bdf8; font-size: 1.3rem; margin-top: 25px; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; background: #0f172a; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #334155; }
+    th { background: #1e293b; color: #94a3b8; }
+    pre { background: #090d16; padding: 15px; border-radius: 8px; overflow-x: auto; color: #38bdf8; font-size: 0.9rem; }
+    code { font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <a href="/">Home</a>
+      <a href="/oled-display.html">OLED Display (I2C)</a>
+    </nav>
+
+    <h1>Connecting and Programming a 0.96" SSD1306 OLED (I2C) with ESP32</h1>
+    <p>Complete wiring schematic, required libraries, and tested Arduino C++ verification code.</p>
+
+    <h2>Hardware Pinout Connections</h2>
+    <table>
+      <thead>
+        <tr><th>OLED Pin</th><th>ESP32 Pin</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>GND</strong></td><td>GND</td><td>Ground reference (Black)</td></tr>
+        <tr><td><strong>VCC</strong></td><td>3V3</td><td>3.3V power rail (Red)</td></tr>
+        <tr><td><strong>SCL</strong></td><td>GPIO 22</td><td>I2C clock line (Yellow)</td></tr>
+        <tr><td><strong>SDA</strong></td><td>GPIO 21</td><td>I2C data line (Blue)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Arduino IDE Libraries</h2>
+    <p>Install via Arduino Library Manager:</p>
+    <ul>
+      <li><strong>Adafruit SSD1306</strong></li>
+      <li><strong>Adafruit GFX Library</strong></li>
+    </ul>
+
+    <h2>Arduino C++ Verification Code</h2>
+    <pre><code>#include &lt;Wire.h&gt;
+#include &lt;Adafruit_GFX.h&gt;
+#include &lt;Adafruit_SSD1306.h&gt;
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+#define SCREEN_ADDRESS 0x3C
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &amp;Wire, OLED_RESET);
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(21, 22);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;);
+  }
+
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setTextSize(1);
+  display.setCursor(0, 4);
+  display.println("TechCircuitGuide.com");
+
+  display.drawLine(0, 16, SCREEN_WIDTH, 16, SSD1306_WHITE);
+
+  display.setTextSize(2);
+  display.setCursor(10, 26);
+  display.println("ESP32 OK");
+
+  display.setTextSize(1);
+  display.setCursor(18, 48);
+  display.println("I2C OLED Ready");
+
+  display.display();
+}
+
+void loop() {}</code></pre>
+  </div>
+</body>
+</html>
