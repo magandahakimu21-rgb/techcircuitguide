@@ -4,4 +4,9 @@
     <loc>https://techcircuitguide.com/</loc>
     <priority>1.0</priority>
   </url>
+  <url>
+    <loc>https://techcircuitguide.com/usbc-pd-sink-controller.html</loc>
+    <lastmod>2026-11-03</lastmod>
+    <priority>0.8</priority>
+  </url>
 </urlset>
