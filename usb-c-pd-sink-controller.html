@@ -1,0 +1,652 @@
+---
+title: "USB-C Power Delivery Sink Controller (CH224K + ESP32): 5V to 20V PD Trigger Guide"
+description: "Build a USB-C PD sink controller with the CH224K and ESP32. Request 5V, 9V, 12V, 15V or 20V from any PD charger, with OLED voltage and current readout. Full wiring and code."
+date: 2026-11-08
+author: "Hakimu Maganda"
+category: "Power Electronics"
+keywords:
+  - USB-C Power Delivery sink controller
+  - CH224K PD trigger board
+  - USB PD trigger 5V 9V 12V 15V 20V
+  - ESP32 USB-C PD voltage selector
+  - how to get 12V from USB-C charger
+  - CH224K ESP32 tutorial
+  - USB PD decoy module Arduino
+  - USB-C bench power supply DIY
+  - INA219 USB-C power monitor
+  - CH224K CFG pins truth table
+---
+
+<article>
+
+<h1>USB-C Power Delivery Sink Controller: Get 5V, 9V, 12V, 15V or 20V From Any PD Charger</h1>
+
+<p>By Hakimu Maganda | Category: Power Electronics | Published: 2026-11-08</p>
+
+<h2>Why You Need a USB-C PD Sink Controller</h2>
+
+<p><strong>Tired of hunting for a 12V adapter that fits your project?</strong> A modern USB-C PD charger already has the power you need: 5V, 9V, 12V, 15V and 20V at up to 65W or more. The catch is that a PD charger outputs only 5V until your device asks for a higher voltage. Without a <strong>USB-C Power Delivery sink controller</strong>, your 12V fan, LED strip or ESP32 project never receives it.</p>
+
+<p>In this guide you will build a <strong>programmable USB-C PD sink controller</strong> using the <strong>CH224K</strong> PD trigger chip and an <strong>ESP32</strong>. Press a button and the board requests a new voltage from the charger. An OLED shows the requested voltage, the measured voltage, current in mA, power in mW and a power-good status. It works as a compact <strong>USB-C bench power supply</strong> and is a solid base for DIY chargers, soldering irons, LED drivers and portable test rigs.</p>
+
+<p><strong>What you will learn:</strong></p>
+<ul>
+  <li>How a USB PD sink controller negotiates voltage with a charger</li>
+  <li>How to wire a CH224K module to an ESP32 safely, including the 3.3V logic limit</li>
+  <li>How the CFG1, CFG2 and CFG3 pins select 5V, 9V, 12V, 15V and 20V</li>
+  <li>A safe-by-default design that boots at 9V and blocks 15V and 20V until you allow them</li>
+  <li>Production-ready Arduino C++ code with live power monitoring</li>
+</ul>
+
+<p><strong>Safety first:</strong> 15V and 20V can destroy loads that are rated for 5V or 12V only. Always check your load's maximum input voltage before enabling high-voltage profiles.</p>
+
+<h2>Bill of Materials (BOM)</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Component</th>
+      <th>Qty</th>
+      <th>Key Spec and Notes</th>
+      <th>Where to Buy</th>
+      <th>Approx. Price</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>CH224K USB-C PD trigger module with CFG1, CFG2, CFG3 and PG pads</td>
+      <td>1</td>
+      <td>Must expose the CFG pads; fixed-voltage PD sink</td>
+      <td>Alibaba, AliExpress, LCSC (bare chip), local electronics shops</td>
+      <td>1.5 to 4 USD</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>ESP32 DevKit (30 or 38 pin)</td>
+      <td>1</td>
+      <td>3.3V logic is required (see warning below)</td>
+      <td>Alibaba, AliExpress, local suppliers</td>
+      <td>4 to 7 USD</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>INA219 current and voltage sensor module</td>
+      <td>1</td>
+      <td>26V bus maximum, 0.1 ohm shunt, about 3.2A maximum</td>
+      <td>Alibaba, AliExpress</td>
+      <td>1 to 3 USD</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>SSD1306 OLED 128x64, I2C (address 0x3C)</td>
+      <td>1</td>
+      <td>3.3V compatible</td>
+      <td>Alibaba, AliExpress, local shops</td>
+      <td>2 to 4 USD</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Buck converter module (Mini360 or LM2596), set to 5.0V</td>
+      <td>1</td>
+      <td>Input rating must be 23V or higher</td>
+      <td>Alibaba, local suppliers</td>
+      <td>1 to 2 USD</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Resistor 6.8k ohm, 1/4W</td>
+      <td>1</td>
+      <td>CFG1 safe default (requests 9V at power-up)</td>
+      <td>Any electronics shop</td>
+      <td>Under 0.1 USD</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Tactile push button</td>
+      <td>1</td>
+      <td>Voltage cycle button</td>
+      <td>Any electronics shop</td>
+      <td>Under 0.1 USD</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>USB-C PD charger, 45W or higher</td>
+      <td>1</td>
+      <td>Must advertise 9V, 12V, 15V and 20V profiles</td>
+      <td>Local phone and laptop accessory shops</td>
+      <td>8 to 20 USD</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>USB-C cable rated 3A or higher</td>
+      <td>1</td>
+      <td>A weak cable causes voltage drops</td>
+      <td>Local shops, Alibaba</td>
+      <td>2 to 5 USD</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Breadboard, jumper wires, 2-pin screw terminal</td>
+      <td>1 set</td>
+      <td>Wiring and load output</td>
+      <td>Any electronics shop</td>
+      <td>3 to 5 USD</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>Sourcing tips for East Africa:</strong> Bare chips and modules are cheapest on Alibaba, AliExpress or LCSC, but shipping takes time. For faster builds, check electronics markets such as Kariakoo in Dar es Salaam and River Road in Nairobi for ESP32 boards, OLEDs and buck modules. Buy PD chargers from reputable sellers, because fake 65W chargers are common.</p>
+
+<p><strong>Compatibility warning:</strong> The CH224K datasheet limits the CFG2 and CFG3 input voltage to 3.7V, so use a 3.3V microcontroller such as the ESP32, Raspberry Pi Pico or ESP8266. Do not connect those pins directly to a 5V Arduino Uno or Nano without level shifting.</p>
+
+<h2>Hardware Wiring Breakdown Table</h2>
+
+<h3>Pin Connections</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>From (Board / Pin)</th>
+      <th>To (Component / Pin)</th>
+      <th>Function / Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PD charger USB-C</td>
+      <td>CH224K module USB-C input</td>
+      <td>PD negotiation and 5V to 20V power input</td>
+    </tr>
+    <tr>
+      <td>CH224K module VOUT (+)</td>
+      <td>INA219 VIN+</td>
+      <td>Power rail into the shunt (high-side sensing)</td>
+    </tr>
+    <tr>
+      <td>CH224K module VOUT (+)</td>
+      <td>Buck converter IN+</td>
+      <td>Powers the ESP32 from the PD rail</td>
+    </tr>
+    <tr>
+      <td>INA219 VIN-</td>
+      <td>Load (+) / screw terminal (+)</td>
+      <td>Rail to your load, measured by the INA219</td>
+    </tr>
+    <tr>
+      <td>CH224K module GND</td>
+      <td>Common GND (ESP32, INA219, OLED, buck, load)</td>
+      <td>Single shared ground</td>
+    </tr>
+    <tr>
+      <td>Buck converter OUT+ (5.0V)</td>
+      <td>ESP32 VIN (5V pin)</td>
+      <td>Powers the ESP32 (adjust the buck to 5.0V before connecting)</td>
+    </tr>
+    <tr>
+      <td>ESP32 3V3</td>
+      <td>INA219 VCC and OLED VCC</td>
+      <td>3.3V power for the sensors</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO21</td>
+      <td>INA219 SDA and OLED SDA</td>
+      <td>I2C data</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO22</td>
+      <td>INA219 SCL and OLED SCL</td>
+      <td>I2C clock</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO25</td>
+      <td>CH224K CFG1</td>
+      <td>Voltage select bit 1 (HIGH requests 5V)</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO26</td>
+      <td>CH224K CFG2</td>
+      <td>Voltage select bit 2</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO27</td>
+      <td>CH224K CFG3</td>
+      <td>Voltage select bit 3</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO32</td>
+      <td>CH224K PG</td>
+      <td>Power-good input (active LOW)</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO33</td>
+      <td>Push button, other leg to GND</td>
+      <td>Cycles the voltage profile (internal pull-up used)</td>
+    </tr>
+    <tr>
+      <td>CH224K CFG1</td>
+      <td>6.8k resistor to GND</td>
+      <td>Safe default: requests 9V while the ESP32 is not running yet</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Voltage Selection Truth Table (Level Configuration Mode)</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>CFG1</th>
+      <th>CFG2</th>
+      <th>CFG3</th>
+      <th>Requested Voltage</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>any</td><td>any</td><td>5V</td></tr>
+    <tr><td>0</td><td>0</td><td>0</td><td>9V</td></tr>
+    <tr><td>0</td><td>0</td><td>1</td><td>12V</td></tr>
+    <tr><td>0</td><td>1</td><td>1</td><td>15V</td></tr>
+    <tr><td>0</td><td>1</td><td>0</td><td>20V</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Why the 6.8k resistor matters:</strong> If CFG1 is left floating before the microcontroller boots, the CH224K can request 20V. The 6.8k resistor to GND forces a safe 9V request at startup, and the firmware starts in the matching 9V profile so no re-negotiation glitch occurs.</p>
+
+<p><strong>Module warning:</strong> Many CH224K boards have solder jumpers or onboard pull-up and pull-down resistors on the CFG lines. Open or remove these before wiring the ESP32. With the ESP32 disconnected and only the 6.8k resistor fitted, confirm with a multimeter that the module outputs about 9V before connecting any load.</p>
+
+<h2>Schematic Wiring Diagram</h2>
+
+<pre class="mermaid">
+flowchart LR
+    CHG["USB-C PD Charger 45W+"] -->|"USB-C cable"| MOD["CH224K PD Sink Module"]
+
+    MOD -->|"VOUT 5V to 20V"| INA["INA219 VIN+"]
+    MOD -->|"VOUT 5V to 20V"| BUCK["Buck 5.0V IN+"]
+    INA -->|"VIN-"| LOAD["Load (+) Terminal"]
+    BUCK -->|"5.0V"| ESP["ESP32 VIN"]
+
+    ESP -->|"GPIO25"| CFG1["CH224K CFG1"]
+    ESP -->|"GPIO26"| CFG2["CH224K CFG2"]
+    ESP -->|"GPIO27"| CFG3["CH224K CFG3"]
+    MOD -->|"PG (active LOW)"| PG["ESP32 GPIO32"]
+
+    ESP -->|"3V3"| PWR["INA219 + OLED VCC"]
+    ESP -->|"GPIO21 SDA / GPIO22 SCL"| BUS["INA219 + SSD1306 I2C"]
+
+    BTN["Push Button"] -->|"GPIO33 to GND"| ESP
+    R1["6.8k resistor"] -->|"CFG1 to GND"| CFG1
+
+    GND(("Common GND")) --- MOD
+    GND --- ESP
+    GND --- BUCK
+    GND --- LOAD
+</pre>
+
+<p>ASCII power-rail view (works without JavaScript):</p>
+
+<pre>
+ PD Charger --USB-C--&gt; [CH224K] ---VOUT(5V-20V)---+---&gt; [INA219 VIN+ ... VIN-] ---&gt; LOAD (+)
+                          |                        |
+                  CFG1/2/3 + PG                    +---&gt; [Buck 5.0V] ---&gt; ESP32 VIN
+                          |                                                 |
+                          +&lt;------- GPIO25/26/27 , GPIO32 -------------------+
+
+ ALL GROUNDS TIED TOGETHER (CH224K GND = ESP32 GND = INA219 GND = Load GND)
+ 6.8k resistor: CFG1 ---/\/\/\--- GND
+</pre>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true });
+</script>
+
+<h2>Clean, Production-Ready Code (Arduino C++ for ESP32)</h2>
+
+<p><strong>Libraries to install</strong> (Arduino IDE, Library Manager): Adafruit SSD1306, Adafruit GFX Library and Adafruit INA219. Also install Adafruit BusIO if prompted.</p>
+<p><strong>Board package:</strong> esp32 by Espressif Systems. Select the board "ESP32 Dev Module".</p>
+
+<pre><code class="language-cpp">/*
+  USB-C Power Delivery Sink Controller
+  Tech Circuit Guide - techcircuitguide.com
+  Author: Hakimu Maganda
+  Hardware: ESP32 + CH224K PD module + INA219 + SSD1306 OLED
+
+  Behavior:
+  - Boots in the 9V profile (matches the 6.8k resistor on CFG1).
+  - Button press cycles through allowed voltage profiles.
+  - 15V and 20V are BLOCKED unless ALLOW_HIGH_VOLTAGE is set to true.
+  - OLED shows target voltage, measured voltage, current, power and status.
+*/
+
+#include &lt;Arduino.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;Adafruit_GFX.h&gt;
+#include &lt;Adafruit_SSD1306.h&gt;
+#include &lt;Adafruit_INA219.h&gt;
+
+// ---------------- Pin configuration ----------------
+#define I2C_SDA_PIN  21
+#define I2C_SCL_PIN  22
+#define PIN_CFG1     25   // CH224K CFG1
+#define PIN_CFG2     26   // CH224K CFG2
+#define PIN_CFG3     27   // CH224K CFG3
+#define PIN_PG       32   // CH224K PG (active LOW = power good)
+#define PIN_BTN      33   // Push button to GND
+
+// ---------------- Display configuration ----------------
+#define SCREEN_WIDTH  128
+#define SCREEN_HEIGHT 64
+#define OLED_ADDR     0x3C
+
+// ---------------- Safety settings ----------------
+// Set to true ONLY if your load is rated for 15V and 20V.
+const bool ALLOW_HIGH_VOLTAGE = false;
+
+// Set to false if your module does not expose the PG pin.
+const bool USE_PG_PIN = true;
+
+// ---------------- PD profile table ----------------
+// Matches the CH224K level configuration truth table.
+struct PdProfile {
+  uint8_t volts;
+  uint8_t cfg1;
+  uint8_t cfg2;
+  uint8_t cfg3;
+};
+
+const PdProfile PROFILES[] = {
+  {  5, HIGH, LOW,  LOW  },  // CFG1=1 gives 5V
+  {  9, LOW,  LOW,  LOW  },  // CFG1=0, CFG2=0, CFG3=0 gives 9V
+  { 12, LOW,  LOW,  HIGH },  // CFG1=0, CFG2=0, CFG3=1 gives 12V
+  { 15, LOW,  HIGH, HIGH },  // CFG1=0, CFG2=1, CFG3=1 gives 15V
+  { 20, LOW,  HIGH, LOW  }   // CFG1=0, CFG2=1, CFG3=0 gives 20V
+};
+
+const uint8_t PROFILE_COUNT   = sizeof(PROFILES) / sizeof(PROFILES[0]);
+const uint8_t DEFAULT_PROFILE = 1;   // 9V, matches hardware default
+
+// ---------------- Globals ----------------
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &amp;Wire, -1);
+Adafruit_INA219  ina219;
+
+uint8_t       currentIdx = DEFAULT_PROFILE;
+unsigned long changedAt  = 0;
+unsigned long lastDraw   = 0;
+unsigned long lastPress  = 0;
+bool          wasDown    = false;
+
+// ---------------- Apply a PD profile ----------------
+// CFG2 and CFG3 are written first, CFG1 last, to reduce transient states.
+void applyProfile(uint8_t idx) {
+  const PdProfile &amp;p = PROFILES[idx];
+  digitalWrite(PIN_CFG2, p.cfg2);
+  digitalWrite(PIN_CFG3, p.cfg3);
+  digitalWrite(PIN_CFG1, p.cfg1);
+  currentIdx = idx;
+  changedAt  = millis();
+  Serial.printf("Requested profile: %uV\n", p.volts);
+}
+
+// ---------------- Find next allowed profile ----------------
+uint8_t nextIndex(uint8_t idx) {
+  for (uint8_t i = 1; i &lt;= PROFILE_COUNT; i++) {
+    uint8_t n = (idx + i) % PROFILE_COUNT;
+    if (ALLOW_HIGH_VOLTAGE || PROFILES[n].volts &lt;= 12) {
+      return n;
+    }
+  }
+  return idx;
+}
+
+// ---------------- Status evaluation ----------------
+const char* statusText(float busV) {
+  uint8_t target = PROFILES[currentIdx].volts;
+
+  if (millis() - changedAt &lt; 1500) return "NEGOTIATING";
+
+  bool vOk    = fabsf(busV - (float)target) &lt;= ((float)target * 0.15f);
+  bool pgGood = USE_PG_PIN ? (digitalRead(PIN_PG) == LOW) : true;
+
+  if (pgGood &amp;&amp; vOk) return "OK";
+  if (!vOk)          return "V MISMATCH";
+  return "PG FAULT";
+}
+
+// ---------------- Button handling ----------------
+void handleButton() {
+  bool down = (digitalRead(PIN_BTN) == LOW);
+  if (down &amp;&amp; !wasDown &amp;&amp; (millis() - lastPress &gt; 50)) {
+    lastPress = millis();
+    applyProfile(nextIndex(currentIdx));
+  }
+  wasDown = down;
+}
+
+// ---------------- OLED update ----------------
+void updateDisplay() {
+  float busV  = ina219.getBusVoltage_V();
+  float curmA = ina219.getCurrent_mA();
+  float powmW = ina219.getPower_mW();
+  const char* st = statusText(busV);
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(0, 0);
+  display.print("PD Target: ");
+  display.print(PROFILES[currentIdx].volts);
+  display.println("V");
+
+  display.setCursor(0, 14);
+  display.print("Measured : ");
+  display.print(busV, 2);
+  display.println("V");
+
+  display.setCursor(0, 26);
+  display.print("Current  : ");
+  display.print(curmA, 0);
+  display.println("mA");
+
+  display.setCursor(0, 38);
+  display.print("Power    : ");
+  display.print(powmW, 0);
+  display.println("mW");
+
+  display.setCursor(0, 52);
+  display.print("Status: ");
+  display.print(st);
+
+  display.display();
+
+  Serial.printf("Target=%uV Bus=%.2fV I=%.0fmA P=%.0fmW Status=%s\n",
+                PROFILES[currentIdx].volts, busV, curmA, powmW, st);
+}
+
+// ---------------- Setup ----------------
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+
+  // CFG pins start as outputs at the 9V profile (all LOW),
+  // matching the hardware default set by the 6.8k resistor.
+  pinMode(PIN_CFG1, OUTPUT);
+  pinMode(PIN_CFG2, OUTPUT);
+  pinMode(PIN_CFG3, OUTPUT);
+  pinMode(PIN_PG,   INPUT_PULLUP);
+  pinMode(PIN_BTN,  INPUT_PULLUP);
+
+  applyProfile(DEFAULT_PROFILE);
+
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println("ERROR: SSD1306 not found. Check wiring and address 0x3C.");
+    for (;;) { delay(1000); }
+  }
+
+  if (!ina219.begin()) {
+    Serial.println("ERROR: INA219 not found. Check wiring and address 0x40.");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("INA219 NOT FOUND");
+    display.println("Check I2C wiring");
+    display.display();
+    for (;;) { delay(1000); }
+  }
+
+  // 32V range, 2A max calibration (suits 0.1 ohm shunt modules)
+  ina219.setCalibration_32V_2A();
+
+  Serial.println("USB-C PD Sink Controller ready.");
+}
+
+// ---------------- Main loop ----------------
+void loop() {
+  handleButton();
+
+  if (millis() - lastDraw &gt;= 250) {
+    lastDraw = millis();
+    updateDisplay();
+  }
+}
+</code></pre>
+
+<h2>Step-By-Step Implementation Guide</h2>
+
+<h3>Step 1: Prepare the CH224K Module</h3>
+<ul>
+  <li>Inspect your module for solder jumpers or resistors on CFG1, CFG2 and CFG3. Open or remove any that tie those pins to fixed levels.</li>
+  <li>Identify the VOUT (+), GND, CFG1, CFG2, CFG3 and PG pads. Pad labels vary between sellers, so check the silkscreen.</li>
+</ul>
+
+<h3>Step 2: Set the Buck Converter Before Connecting the ESP32</h3>
+<ul>
+  <li>Feed the buck converter with 9V to 12V from a bench supply or the PD module.</li>
+  <li>Turn the trimmer until the output reads exactly 5.0V on a multimeter.</li>
+  <li>Only then connect it to the ESP32 VIN pin.</li>
+</ul>
+
+<h3>Step 3: Fit the Safe-Default Resistor</h3>
+<ul>
+  <li>Solder the 6.8k resistor between CFG1 and GND, with the ESP32 and load disconnected.</li>
+</ul>
+
+<h3>Step 4: Bench-Test the Module Alone</h3>
+<ul>
+  <li>Plug in the PD charger with only the CH224K, the 6.8k resistor and a multimeter on VOUT.</li>
+  <li>Confirm about 9V. If you read 5V or 20V, recheck for leftover pull-ups or jumpers.</li>
+</ul>
+
+<h3>Step 5: Wire the ESP32, INA219 and OLED</h3>
+<ul>
+  <li>Follow the pin table: SDA to GPIO21 and SCL to GPIO22 for both the INA219 and the OLED.</li>
+  <li>Power both from the ESP32 3V3 pin.</li>
+  <li>Connect CFG1, CFG2 and CFG3 to GPIO25, GPIO26 and GPIO27, and PG to GPIO32.</li>
+  <li>Connect the button between GPIO33 and GND.</li>
+  <li>Tie all grounds together.</li>
+</ul>
+
+<h3>Step 6: Upload the Code</h3>
+<ul>
+  <li>Install the libraries listed above and the ESP32 board package.</li>
+  <li>Open the sketch, select ESP32 Dev Module and the correct COM port.</li>
+  <li>Click Upload. If it stalls at "Connecting...", hold the BOOT button on the ESP32.</li>
+  <li>Open the Serial Monitor at 115200 baud to see live readings.</li>
+</ul>
+
+<h3>Step 7: Test With a Safe Load</h3>
+<ul>
+  <li>Connect a small resistor load or a 12V-tolerant device.</li>
+  <li>Press the button to cycle 9V, 12V and 5V, and confirm the Measured value tracks the target.</li>
+  <li>Enable 15V and 20V only after setting ALLOW_HIGH_VOLTAGE to true and confirming your load rating.</li>
+</ul>
+
+<p><strong>Next step:</strong> Learn more about the sensor in the <a href="/guides/esp32-ina219-power-monitor.html">ESP32 and INA219 Power Monitor Guide</a>, and set up your regulator with the <a href="/guides/lm2596-buck-converter-setup.html">LM2596 Buck Converter Setup Guide</a>.</p>
+
+<h2>Troubleshooting and FAQs</h2>
+
+<h3>Wiring and Hardware Problems</h3>
+
+<p><strong>Why does my CH224K only output 5V?</strong><br>
+Common causes are a charger that does not offer the requested voltage profile, a low-quality cable, or CFG1 being held HIGH by a leftover jumper or pull-up. Try a different PD charger and confirm its label lists the voltage you want.</p>
+
+<p><strong>Why did my board output 20V at startup?</strong><br>
+A floating CFG1 can lead to a 20V request. Fit the 6.8k resistor from CFG1 to GND for a safe 9V default before the microcontroller boots.</p>
+
+<p><strong>Can I use an Arduino Uno or Nano with the CH224K?</strong><br>
+Not directly. CFG2 and CFG3 are limited to 3.7V on the CH224K, so use a 3.3V microcontroller such as the ESP32 or Pico, or add level shifting.</p>
+
+<p><strong>My OLED stays blank. What should I check?</strong><br>
+Run an I2C scanner. The OLED is normally at 0x3C and the INA219 at 0x40. Check that SDA and SCL are not swapped and that both modules share GND with the ESP32.</p>
+
+<p><strong>The ESP32 resets when I change voltage.</strong><br>
+The buck converter input is probably dipping during the transition. Add a 100uF to 470uF capacitor on the buck input and use short, thick wires on the PD rail.</p>
+
+<p><strong>The INA219 shows 0 mA or negative current.</strong><br>
+Check that current flows from VIN+ to VIN-. Swapped terminals give negative readings.</p>
+
+<h3>Compilation and Upload Errors</h3>
+
+<p><strong>Error: Adafruit_INA219.h: No such file or directory</strong><br>
+Install "Adafruit INA219" from the Library Manager, along with Adafruit BusIO.</p>
+
+<p><strong>Error: SSD1306 allocation failed, or display not found</strong><br>
+Check the I2C address (0x3C or 0x3D) and the wiring, and make sure you selected an ESP32 board rather than an Arduino board.</p>
+
+<p><strong>Upload stuck on "Connecting........"</strong><br>
+Hold the BOOT button while uploading, use a data-capable USB cable, and install the CP210x or CH340 driver for your board.</p>
+
+<h3>Long-Tail Questions</h3>
+
+<p><strong>How do I get 12V from a USB-C charger?</strong><br>
+Use a PD trigger or sink chip such as the CH224K, set CFG1, CFG2 and CFG3 to 0, 0 and 1, and use a charger that supports 12V PD.</p>
+
+<p><strong>Does the CH224K support PPS or adjustable voltage?</strong><br>
+The CH224K selects fixed PD voltages (5V, 9V, 12V, 15V and 20V). Variants such as the CH224Q and CH224A add I2C control. Check the datasheet for the exact part you buy.</p>
+
+<p><strong>What is the maximum current?</strong><br>
+It depends on your charger and cable. Standard cables carry 3A, and 5A needs a suitably rated cable and charger. This build is limited to about 3.2A by the INA219 shunt, so use a different current sensor for heavier loads.</p>
+
+<p><strong>Can I power a 12V LED strip directly?</strong><br>
+Yes, if the strip is rated for 12V and within your charger's wattage. Test at 9V first and watch the current on the OLED.</p>
+
+<h2>Recommended Parts, Downloads and Related Guides</h2>
+
+<p><em>Affiliate disclosure: some links below may earn Tech Circuit Guide a small commission at no extra cost to you. We only recommend parts we would use ourselves.</em></p>
+
+<h3>Recommended Parts and Tools</h3>
+<ul>
+  <li><a href="/recommends/ch224k-module.html" rel="sponsored noopener">CH224K PD trigger module with CFG pads: check price and availability</a></li>
+  <li><a href="/recommends/esp32-devkit.html" rel="sponsored noopener">ESP32 DevKit with 3.3V logic: view recommended boards</a></li>
+  <li><a href="/recommends/ina219-module.html" rel="sponsored noopener">INA219 current sensor module: get the INA219</a></li>
+  <li><a href="/recommends/usb-c-pd-65w-charger.html" rel="sponsored noopener">65W USB-C PD charger: see tested chargers</a></li>
+  <li><a href="/recommends/usb-c-pd-tester.html" rel="sponsored noopener">USB-C PD tester: verify your charger's profiles</a></li>
+  <li><a href="/recommends/budget-multimeter.html" rel="sponsored noopener">Digital multimeter: best budget picks</a></li>
+</ul>
+
+<h3>Free Download</h3>
+<p><strong>Get the USB-C PD CFG Pin Cheat Sheet</strong>, a printable truth table and wiring checklist: <a href="/downloads/usb-c-pd-cfg-cheat-sheet.html">download the cheat sheet</a>.</p>
+
+<h3>Related Guides</h3>
+<ul>
+  <li><a href="/guides/esp32-ina219-power-monitor.html">ESP32 and INA219 Power Monitor: Measure Voltage, Current and Power</a></li>
+  <li><a href="/guides/lm2596-buck-converter-setup.html">LM2596 Buck Converter Setup and Calibration</a></li>
+  <li><a href="/guides/esp32-ssd1306-oled-tutorial.html">ESP32 and SSD1306 OLED Display Tutorial</a></li>
+  <li><a href="/guides/diy-usb-c-bench-power-supply.html">Build a DIY USB-C Bench Power Supply</a></li>
+</ul>
+
+<h3>Level Up This Project</h3>
+<ul>
+  <li>Add a relay or MOSFET load switch so the output stays off until the voltage is confirmed.</li>
+  <li>Log voltage, current and power over Wi-Fi to a dashboard.</li>
+  <li>Turn this into a portable USB-C soldering iron or LED driver power source.</li>
+</ul>
+
+<p><strong>Built this project?</strong> Share your result or ask a question in the comments, and subscribe to Tech Circuit Guide for the next power electronics build.</p>
+
+</article>
