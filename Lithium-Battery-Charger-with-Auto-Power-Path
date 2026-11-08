@@ -1,5 +1,5 @@
 ---
-title: "Lithium Battery Charger with Auto Power-Path (BQ24074 + ESP32)"
+title: "Lithium-Battery-Charger-with-Auto-Power-Path (BQ24074 + ESP32)"
 description: "Build a lithium battery charger with auto power-path using the BQ24074 and ESP32. Run your project while charging, with seamless battery switchover and live monitoring."
 date: 2026-11-08
 author: "Hakimu Maganda"
