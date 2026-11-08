@@ -1,0 +1,752 @@
+---
+title: "Lithium Battery Charger with Auto Power-Path (BQ24074 + ESP32)"
+description: "Build a lithium battery charger with auto power-path using the BQ24074 and ESP32. Run your project while charging, with seamless battery switchover and live monitoring."
+date: 2026-11-08
+author: "Hakimu Maganda"
+category: "Power Electronics"
+keywords:
+  - lithium battery charger with power path
+  - BQ24074 tutorial
+  - charge and use lithium battery at the same time
+  - load sharing Li-ion charger
+  - auto power path battery charger
+  - ESP32 battery powered project with charger
+  - TP4056 vs power path charger
+  - DIY UPS for ESP32
+  - limit LiPo charge to 80 percent
+  - LiPo charger with load sharing
+---
+
+<article>
+
+<h1>Lithium Battery Charger with Auto Power-Path: Run Your Project While It Charges</h1>
+
+<p>By Hakimu Maganda | Category: Power Electronics | Published: 2026-11-08</p>
+
+<h2>Why You Need a Power-Path Lithium Charger</h2>
+
+<p><strong>Does your ESP32 project reset, overheat the battery, or never finish charging when you plug in the charger?</strong> That is the classic problem with a basic TP4056 board. It charges the battery but has no idea a load is attached, so the load steals charge current, the charge cycle never terminates correctly, and the battery sits at full voltage under constant stress.</p>
+
+<p>A <strong>lithium battery charger with auto power-path</strong> fixes this at the hardware level. When external power is present, the load runs from the input and the leftover current charges the battery. When you unplug the input, the load switches over to the battery with no reset. This is the same power-path behavior used in phones, power banks and solar sensor nodes.</p>
+
+<p>In this guide you will build a complete <strong>load-sharing Li-ion charger</strong> around the <strong>BQ24074</strong> power-path charger, and add an <strong>ESP32</strong> that reads battery voltage, detects external power, shows charging status on an OLED, and can optionally stop charging at about 80 percent to extend battery life.</p>
+
+<p><strong>What you will learn:</strong></p>
+<ul>
+  <li>How power-path charging works and why it beats a TP4056 for powered projects</li>
+  <li>How to wire the BQ24074 charger board to an ESP32 safely, including protecting 3.3V GPIO pins</li>
+  <li>How to read battery voltage, power-good and charge status in firmware</li>
+  <li>How to use the CE pin to hold the charge level for longer battery life</li>
+  <li>Production-ready Arduino C++ code with low-battery protection</li>
+</ul>
+
+<p><strong>Safety first:</strong> Lithium cells can catch fire if charged incorrectly. Use only a single-cell 3.7V/4.2V Li-ion or LiPo battery with a built-in protection circuit, check polarity twice, and never leave a new build charging unattended.</p>
+
+<h2>Bill of Materials (BOM)</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Component</th>
+      <th>Qty</th>
+      <th>Key Spec and Notes</th>
+      <th>Where to Buy</th>
+      <th>Approx. Price</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>BQ24074 power-path charger breakout (Adafruit Universal USB/DC/Solar charger or equivalent)</td>
+      <td>1</td>
+      <td>5V to 10V input, selectable 0.5A, 1A or 1.5A charge current, CE, PGOOD and CHG pins</td>
+      <td>Adafruit and its distributors, Alibaba (generic BQ24074 modules)</td>
+      <td>8 to 15 USD</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>ESP32 DevKit (30 or 38 pin)</td>
+      <td>1</td>
+      <td>3.3V logic, ADC1 pin used for battery sensing</td>
+      <td>Alibaba, AliExpress, local suppliers</td>
+      <td>4 to 7 USD</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Boost converter module (MT3608 or TPS61023 type)</td>
+      <td>1</td>
+      <td>Set to 5.0V output; input must work down to about 3V</td>
+      <td>Alibaba, AliExpress, local shops</td>
+      <td>1 to 3 USD</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>1S Li-ion or LiPo battery with protection circuit, 2000mAh or more</td>
+      <td>1</td>
+      <td>3.7V nominal, 4.2V full; connector polarity must match the charger</td>
+      <td>Reputable local battery shops, Adafruit, Alibaba (buy from trusted sellers)</td>
+      <td>5 to 12 USD</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>SSD1306 OLED 128x64, I2C (address 0x3C)</td>
+      <td>1</td>
+      <td>Status display (optional but recommended)</td>
+      <td>Alibaba, AliExpress, local shops</td>
+      <td>2 to 4 USD</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Resistor 100k ohm, 1/4W</td>
+      <td>2</td>
+      <td>Battery voltage divider (1 percent tolerance preferred)</td>
+      <td>Any electronics shop</td>
+      <td>Under 0.1 USD each</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Resistor 10k ohm, 1/4W</td>
+      <td>2</td>
+      <td>Pull-ups for PGOOD and CHG signals</td>
+      <td>Any electronics shop</td>
+      <td>Under 0.1 USD each</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>BAT54 Schottky diode (or 1N4148 / 1N5819)</td>
+      <td>2</td>
+      <td>Protects ESP32 pins from the charger status pins</td>
+      <td>Any electronics shop, Alibaba</td>
+      <td>Under 0.2 USD each</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Ceramic capacitor 100nF</td>
+      <td>1</td>
+      <td>Stabilizes the ADC sense node</td>
+      <td>Any electronics shop</td>
+      <td>Under 0.1 USD</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Electrolytic capacitor 470uF, 10V</td>
+      <td>1</td>
+      <td>On the boost output, absorbs ESP32 Wi-Fi current bursts</td>
+      <td>Any electronics shop</td>
+      <td>Under 0.3 USD</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>USB-C 5V 2A charger (or a 6V to 10V solar panel)</td>
+      <td>1</td>
+      <td>Input source for the charger board</td>
+      <td>Local phone accessory shops</td>
+      <td>3 to 8 USD</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>Breadboard, jumper wires</td>
+      <td>1 set</td>
+      <td>Wiring</td>
+      <td>Any electronics shop</td>
+      <td>3 to 5 USD</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>Sourcing tips for East Africa:</strong> Modules and small parts are cheapest on Alibaba or AliExpress, but lithium cells are better bought locally from a shop that stocks protected cells, because counterfeit and unprotected cells are common online. Electronics markets such as Kariakoo in Dar es Salaam and River Road in Nairobi usually stock ESP32 boards, OLEDs, resistors and boost modules.</p>
+
+<p><strong>Compatibility warning:</strong> This charger is for single-cell 3.7V/4.2V Li-ion and LiPo batteries only. Do not connect LiFePO4, NiMH or multi-cell packs.</p>
+
+<h2>Hardware Wiring Breakdown Table</h2>
+
+<h3>How Power-Path Works in This Build</h3>
+
+<ul>
+  <li><strong>Input present:</strong> The OUT pin provides a regulated rail of up to 4.4V to your load, and any spare current charges the battery.</li>
+  <li><strong>Input removed:</strong> OUT follows the battery voltage (roughly 3.0V to 4.2V) with no interruption.</li>
+  <li><strong>Heavy load:</strong> If the load needs more than the input can give, the battery supplements it.</li>
+</ul>
+
+<p>Because OUT is only 3.0V to 4.4V, this build adds a 5V boost module so the ESP32 DevKit's own regulator has a stable supply.</p>
+
+<h3>Pin Connections</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>From (Board / Pin)</th>
+      <th>To (Component / Pin)</th>
+      <th>Function / Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>5V USB-C charger or 6V to 10V solar panel</td>
+      <td>Charger board USB-C / DC input (VBUS)</td>
+      <td>External power source</td>
+    </tr>
+    <tr>
+      <td>Battery (JST connector)</td>
+      <td>Charger board Lipo Batt connector (LIPO pin)</td>
+      <td>Battery connection. Check polarity before connecting.</td>
+    </tr>
+    <tr>
+      <td>Charger board OUT</td>
+      <td>Boost module IN+</td>
+      <td>Power-path system rail (about 3.0V to 4.4V)</td>
+    </tr>
+    <tr>
+      <td>Charger board GND</td>
+      <td>Boost IN-, ESP32 GND, OLED GND, divider GND</td>
+      <td>Single shared ground</td>
+    </tr>
+    <tr>
+      <td>Boost module OUT+ (set to 5.0V)</td>
+      <td>ESP32 VIN (5V pin) and 470uF capacitor positive</td>
+      <td>Powers the ESP32. Set boost to 5.0V before connecting.</td>
+    </tr>
+    <tr>
+      <td>Charger board LIPO pin</td>
+      <td>100k resistor (R1) to GPIO34 node</td>
+      <td>Top of the battery voltage divider</td>
+    </tr>
+    <tr>
+      <td>GPIO34 node</td>
+      <td>100k resistor (R2) to GND, plus 100nF capacitor to GND</td>
+      <td>Bottom of divider; halves battery voltage so it is safe for the ADC</td>
+    </tr>
+    <tr>
+      <td>Charger board PGOOD</td>
+      <td>BAT54 diode cathode (striped end)</td>
+      <td>Open-drain power-good output, isolated by the diode</td>
+    </tr>
+    <tr>
+      <td>BAT54 anode (PGOOD diode)</td>
+      <td>ESP32 GPIO32, plus 10k resistor to ESP32 3V3</td>
+      <td>Reads LOW when external power is good</td>
+    </tr>
+    <tr>
+      <td>Charger board CHG</td>
+      <td>BAT54 diode cathode (striped end)</td>
+      <td>Open-drain charging status output, isolated by the diode</td>
+    </tr>
+    <tr>
+      <td>BAT54 anode (CHG diode)</td>
+      <td>ESP32 GPIO33, plus 10k resistor to ESP32 3V3</td>
+      <td>Reads LOW while the battery is charging</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO25</td>
+      <td>Charger board CE</td>
+      <td>Charge enable: LOW enables charging, HIGH pauses it</td>
+    </tr>
+    <tr>
+      <td>ESP32 3V3</td>
+      <td>OLED VCC</td>
+      <td>3.3V power for the display</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO21</td>
+      <td>OLED SDA</td>
+      <td>I2C data</td>
+    </tr>
+    <tr>
+      <td>ESP32 GPIO22</td>
+      <td>OLED SCL</td>
+      <td>I2C clock</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>Why the diodes matter:</strong> PGOOD and CHG are open-drain outputs, and on many breakouts they drive an indicator LED that is fed from the charger's own supply. When released, those pins can sit at the OUT voltage (up to 4.4V), which is higher than the ESP32 can safely accept on a GPIO. A small diode with a pull-up to 3.3V solves this: the diode conducts only when the charger pulls the pin low, and blocks the higher voltage otherwise. It works no matter which rail your board's LED uses.</p>
+
+<h3>Charger Board Settings</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Setting</th>
+      <th>Recommended Value</th>
+      <th>How to Set It</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Fast-charge current</td>
+      <td>About 0.5C of your battery (0.5A for a 1000mAh to 2000mAh cell)</td>
+      <td>Cut the 1.0A solder jumper and bridge the 0.5A jumper (or 1.5A for large cells)</td>
+    </tr>
+    <tr>
+      <td>Input current limit</td>
+      <td>Board default (set by the onboard 1k resistor)</td>
+      <td>Leave EN1 and EN2 jumpers unchanged</td>
+    </tr>
+    <tr>
+      <td>Battery temperature (THERM)</td>
+      <td>Jumper closed if no thermistor; use a 10k NTC in the pack if you have one</td>
+      <td>Leave the THERM jumper as shipped unless fitting an NTC</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Schematic Wiring Diagram</h2>
+
+<pre class="mermaid">
+flowchart LR
+    SRC["USB-C 5V or DC 6V to 10V or Solar"] --&gt;|"VBUS"| CHG["BQ24074 Charger Board"]
+    CHG ---|"LIPO (charge and discharge)"| BAT["1S Li-ion or LiPo, protected"]
+    CHG --&gt;|"OUT 3.0V to 4.4V"| BST["Boost module set to 5.0V"]
+    BST --&gt;|"5.0V"| ESP["ESP32 VIN"]
+
+    BAT --&gt;|"via 100k and 100k divider"| ADC["ESP32 GPIO34 ADC"]
+    CHG --&gt;|"PGOOD via BAT54 diode, 10k pull-up"| PG["ESP32 GPIO32"]
+    CHG --&gt;|"CHG via BAT54 diode, 10k pull-up"| CH["ESP32 GPIO33"]
+    ESP2["ESP32 GPIO25"] --&gt;|"CE (HIGH pauses charging)"| CHG
+
+    ESP --&gt;|"3V3"| OLED["SSD1306 OLED"]
+    ESP --&gt;|"GPIO21 SDA / GPIO22 SCL"| OLED
+
+    GND(("Common GND")) --- CHG
+    GND --- BST
+    GND --- ESP
+    GND --- OLED
+</pre>
+
+<p>ASCII view of the sensing circuit (works without JavaScript):</p>
+
+<pre>
+ Battery (+) / LIPO pin ----[100k]----+----[100k]---- GND
+                                      |
+                                      +----||---- GND    (100nF)
+                                      |
+                                      +----------------&gt; ESP32 GPIO34 (ADC)
+
+ 3V3 ----[10k]----+---------------------&gt; ESP32 GPIO32 (PGOOD input)
+                  |
+                  +---|&gt;|--- Charger PGOOD pin       (BAT54: anode to GPIO, stripe to charger)
+
+ 3V3 ----[10k]----+---------------------&gt; ESP32 GPIO33 (CHG input)
+                  |
+                  +---|&gt;|--- Charger CHG pin         (BAT54: anode to GPIO, stripe to charger)
+
+ ESP32 GPIO25 ---------------------------&gt; Charger CE (LOW = charge, HIGH = pause)
+
+ Charger OUT --&gt; [Boost 5.0V] --&gt; ESP32 VIN       ALL GROUNDS TIED TOGETHER
+</pre>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true });
+</script>
+
+<h2>Clean, Production-Ready Code (Arduino C++ for ESP32)</h2>
+
+<p><strong>Libraries to install</strong> (Arduino IDE, Library Manager): Adafruit SSD1306 and Adafruit GFX Library. Also install Adafruit BusIO if prompted.</p>
+<p><strong>Board package:</strong> esp32 by Espressif Systems (use a recent version, since the sketch uses analogReadMilliVolts). Select the board "ESP32 Dev Module".</p>
+
+<pre><code class="language-cpp">/*
+  Lithium Battery Charger with Auto Power-Path - ESP32 Monitor
+  Tech Circuit Guide - techcircuitguide.com
+  Author: Hakimu Maganda
+  Hardware: ESP32 + BQ24074 power-path charger board + SSD1306 OLED
+
+  What it does:
+  - Detects external power (PGOOD, active LOW)
+  - Detects charging (CHG, active LOW; flashing means a charge timer fault)
+  - Measures battery voltage through a 100k/100k divider on GPIO34
+  - Estimates battery percentage (approximate)
+  - Optionally pauses charging at CHARGE_STOP_V using the CE pin
+  - Deep-sleeps if the battery is nearly empty and no external power is present
+*/
+
+#include &lt;Arduino.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;Adafruit_GFX.h&gt;
+#include &lt;Adafruit_SSD1306.h&gt;
+#include "esp_sleep.h"
+
+// ---------------- Pin configuration ----------------
+#define I2C_SDA_PIN   21
+#define I2C_SCL_PIN   22
+#define PIN_VBAT_ADC  34   // Battery divider midpoint (input only, ADC1)
+#define PIN_PGOOD     32   // Charger PGOOD via diode, LOW = valid input power
+#define PIN_CHG       33   // Charger CHG via diode, LOW = charging
+#define PIN_CE        25   // Charger CE, LOW = charge enabled, HIGH = charge paused
+
+// ---------------- Display configuration ----------------
+#define SCREEN_WIDTH  128
+#define SCREEN_HEIGHT 64
+#define OLED_ADDR     0x3C
+
+// ---------------- Settings ----------------
+const float DIVIDER_RATIO = 2.0f;    // 100k + 100k divider
+const float VBAT_CAL      = 1.000f;  // Calibration: multimeter volts / displayed volts
+
+// Battery-life option: pause charging near 80 percent to reduce cell stress.
+// Voltage is read while charging, so it reads slightly above the resting voltage.
+const bool  LIMIT_CHARGE     = false;
+const float CHARGE_STOP_V    = 4.00f;
+const float CHARGE_RESUME_V  = 3.90f;
+
+// Low-battery handling (the cell's own protection circuit is the real safety net)
+const float LOW_BATT_WARN_V  = 3.45f;
+const float CUTOFF_V         = 3.30f;
+const uint64_t SLEEP_US      = 60ULL * 1000000ULL;  // Re-check every 60 seconds
+
+const uint8_t ADC_SAMPLES    = 32;
+
+// ---------------- Approximate Li-ion voltage to percent curve ----------------
+struct CurvePoint {
+  float volts;
+  float percent;
+};
+
+const CurvePoint CURVE[] = {
+  { 3.30f,   0.0f },
+  { 3.50f,   5.0f },
+  { 3.65f,  20.0f },
+  { 3.75f,  40.0f },
+  { 3.85f,  60.0f },
+  { 3.95f,  75.0f },
+  { 4.05f,  90.0f },
+  { 4.20f, 100.0f }
+};
+
+const uint8_t CURVE_COUNT = sizeof(CURVE) / sizeof(CURVE[0]);
+
+// ---------------- Globals ----------------
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &amp;Wire, -1);
+bool oledOk = false;
+
+bool          chargeEnabled = true;
+bool          lastChg       = false;
+uint8_t       chgToggles    = 0;
+bool          timerFault    = false;
+unsigned long windowStart   = 0;
+unsigned long lastSample    = 0;
+unsigned long lastUpdate    = 0;
+uint8_t       lowCount      = 0;
+
+// ---------------- Battery percentage estimate ----------------
+float percentFromVoltage(float v) {
+  if (v &lt;= CURVE[0].volts) return 0.0f;
+  if (v &gt;= CURVE[CURVE_COUNT - 1].volts) return 100.0f;
+
+  for (uint8_t i = 1; i &lt; CURVE_COUNT; i++) {
+    if (v &lt;= CURVE[i].volts) {
+      float span = CURVE[i].volts - CURVE[i - 1].volts;
+      float frac = (v - CURVE[i - 1].volts) / span;
+      return CURVE[i - 1].percent + frac * (CURVE[i].percent - CURVE[i - 1].percent);
+    }
+  }
+  return 100.0f;
+}
+
+// ---------------- Battery voltage (averaged, calibrated by the ESP32 core) ----------------
+float readBatteryVolts() {
+  uint32_t sum = 0;
+  for (uint8_t i = 0; i &lt; ADC_SAMPLES; i++) {
+    sum += analogReadMilliVolts(PIN_VBAT_ADC);
+    delayMicroseconds(200);
+  }
+  float pinVolts = ((float)sum / (float)ADC_SAMPLES) / 1000.0f;
+  return pinVolts * DIVIDER_RATIO * VBAT_CAL;
+}
+
+// ---------------- Charge enable control (CE: LOW = enabled) ----------------
+void setCharge(bool enable) {
+  if (enable == chargeEnabled) return;
+  chargeEnabled = enable;
+  digitalWrite(PIN_CE, enable ? LOW : HIGH);
+  Serial.println(enable ? "Charging enabled" : "Charging paused (CE high)");
+}
+
+void updateChargeLimit(float vbat) {
+  if (!LIMIT_CHARGE) {
+    setCharge(true);
+    return;
+  }
+  if (chargeEnabled &amp;&amp; vbat &gt;= CHARGE_STOP_V) {
+    setCharge(false);
+  } else if (!chargeEnabled &amp;&amp; vbat &lt;= CHARGE_RESUME_V) {
+    setCharge(true);
+  }
+}
+
+// ---------------- Detect charge timer fault (CHG flashes at about 2 Hz) ----------------
+void sampleChg(bool chgNow) {
+  if (chgNow != lastChg) {
+    chgToggles++;
+    lastChg = chgNow;
+  }
+  if (millis() - windowStart &gt;= 2000) {
+    timerFault = (chgToggles &gt;= 6);
+    chgToggles = 0;
+    windowStart = millis();
+  }
+}
+
+// ---------------- Protective sleep ----------------
+void enterProtectiveSleep() {
+  Serial.println("Battery very low and no external power. Entering deep sleep.");
+  if (oledOk) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 20);
+    display.println("LOW BATTERY");
+    display.println("Sleeping...");
+    display.display();
+    delay(1500);
+    display.ssd1306_command(SSD1306_DISPLAYOFF);
+  }
+  esp_sleep_enable_timer_wakeup(SLEEP_US);
+  esp_deep_sleep_start();
+}
+
+// ---------------- Status update ----------------
+void updateStatus() {
+  bool  usb   = (digitalRead(PIN_PGOOD) == LOW);
+  bool  chg   = (digitalRead(PIN_CHG) == LOW);
+  float vbat  = readBatteryVolts();
+  float pct   = percentFromVoltage(vbat);
+
+  updateChargeLimit(vbat);
+
+  if (!usb &amp;&amp; vbat &lt; CUTOFF_V) {
+    lowCount++;
+  } else {
+    lowCount = 0;
+  }
+  if (lowCount &gt;= 5) {
+    enterProtectiveSleep();
+  }
+
+  const char* state;
+  if (timerFault)                 state = "CHARGE FAULT";
+  else if (usb &amp;&amp; chg)            state = "USB + CHARGING";
+  else if (usb &amp;&amp; !chargeEnabled) state = "USB, CHARGE HOLD";
+  else if (usb)                   state = "USB, CHARGED";
+  else if (vbat &lt; LOW_BATT_WARN_V) state = "BATTERY LOW";
+  else                            state = "BATTERY ONLY";
+
+  if (oledOk) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+
+    display.setCursor(0, 0);
+    display.println(state);
+
+    display.setCursor(0, 16);
+    display.print("Vbat: ");
+    display.print(vbat, 2);
+    display.println("V");
+
+    display.setCursor(0, 28);
+    display.print("Level: ~");
+    display.print(pct, 0);
+    display.println("%");
+
+    display.setCursor(0, 40);
+    display.print("Input: ");
+    display.println(usb ? "GOOD" : "NONE");
+
+    display.setCursor(0, 52);
+    display.print("Charge: ");
+    display.print(chargeEnabled ? "ENABLED" : "PAUSED");
+
+    display.display();
+  }
+
+  Serial.printf("State=%s Vbat=%.2fV Level=~%.0f%% PG=%d CHG=%d CE_enabled=%d\n",
+                state, vbat, pct, usb, chg, chargeEnabled);
+}
+
+// ---------------- Setup ----------------
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+
+  pinMode(PIN_CE, OUTPUT);
+  digitalWrite(PIN_CE, LOW);          // Charging enabled by default
+  pinMode(PIN_PGOOD, INPUT);          // External 10k pull-up to 3V3
+  pinMode(PIN_CHG, INPUT);            // External 10k pull-up to 3V3
+  pinMode(PIN_VBAT_ADC, INPUT);
+  analogSetPinAttenuation(PIN_VBAT_ADC, ADC_11db);
+
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  oledOk = display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  if (!oledOk) {
+    Serial.println("WARNING: SSD1306 not found. Continuing with Serial output only.");
+  }
+
+  lastChg = (digitalRead(PIN_CHG) == LOW);
+  windowStart = millis();
+
+  Serial.println("Power-path charger monitor ready.");
+}
+
+// ---------------- Main loop ----------------
+void loop() {
+  unsigned long now = millis();
+
+  if (now - lastSample &gt;= 50) {
+    lastSample = now;
+    sampleChg(digitalRead(PIN_CHG) == LOW);
+  }
+
+  if (now - lastUpdate &gt;= 500) {
+    lastUpdate = now;
+    updateStatus();
+  }
+}
+</code></pre>
+
+<h2>Step-By-Step Implementation Guide</h2>
+
+<h3>Step 1: Set the Charge Current</h3>
+<ul>
+  <li>Choose a charge current of about 0.5C or less for your cell. For a 2000mAh battery, 1A is the upper limit and 0.5A is gentler.</li>
+  <li>On the charger board, cut the trace on the 1.0A solder jumper and bridge the 0.5A jumper (or leave 1.0A for larger cells).</li>
+</ul>
+
+<h3>Step 2: Verify Battery Polarity Before Connecting</h3>
+<ul>
+  <li>JST battery connectors from different sellers can have reversed wiring. Check the charger board silkscreen and use a multimeter on the battery plug.</li>
+  <li>If the polarity is reversed, re-pin the connector. Never assume it matches.</li>
+</ul>
+
+<h3>Step 3: Bench-Test the Power Path First</h3>
+<ul>
+  <li>Connect only the battery and the charger board, with a multimeter on OUT and GND.</li>
+  <li>With no input power, OUT should follow the battery voltage.</li>
+  <li>Plug in the USB input. OUT should settle at a regulated value of no more than about 4.4V, and the charge LED should light.</li>
+</ul>
+
+<h3>Step 4: Set the Boost Module Before Connecting the ESP32</h3>
+<ul>
+  <li>Feed the boost module from OUT (or a bench supply at 3.7V).</li>
+  <li>Turn the trimmer until the output reads exactly 5.0V. It must stay above the 4.4V OUT maximum.</li>
+  <li>Add the 470uF capacitor across the boost output.</li>
+</ul>
+
+<h3>Step 5: Build the Sensing Circuit</h3>
+<ul>
+  <li>Make the battery divider: LIPO pin, then 100k, then the GPIO34 node, then 100k to GND, with the 100nF capacitor from the node to GND.</li>
+  <li>Fit the two BAT54 diodes with the striped end (cathode) toward the charger pins, and the 10k pull-ups from the GPIO side to 3V3.</li>
+  <li>Check the diode direction twice. A reversed diode makes the signal read incorrectly.</li>
+</ul>
+
+<h3>Step 6: Wire the ESP32 and OLED</h3>
+<ul>
+  <li>Connect GPIO32 to the PGOOD diode node, GPIO33 to the CHG diode node and GPIO25 to CE.</li>
+  <li>Connect the OLED to 3V3, GND, GPIO21 (SDA) and GPIO22 (SCL).</li>
+  <li>Tie all grounds together.</li>
+</ul>
+
+<h3>Step 7: Upload the Code</h3>
+<ul>
+  <li>Install the libraries and the ESP32 board package listed above.</li>
+  <li>Select ESP32 Dev Module and the correct COM port, then click Upload. If it stalls at "Connecting...", hold the BOOT button.</li>
+  <li>Open the Serial Monitor at 115200 baud.</li>
+</ul>
+
+<h3>Step 8: Calibrate the Battery Voltage</h3>
+<ul>
+  <li>Measure the battery voltage with a multimeter and compare it with the Vbat value on the OLED.</li>
+  <li>Set VBAT_CAL to the multimeter value divided by the displayed value, then re-upload.</li>
+</ul>
+
+<h3>Step 9: Test Every Power Scenario</h3>
+<ul>
+  <li>Plug in USB: the state should read USB + CHARGING while the battery is not full.</li>
+  <li>Unplug USB: the ESP32 must keep running and switch to BATTERY ONLY with no reset.</li>
+  <li>Replug USB: charging should resume while the project keeps running.</li>
+  <li>Optional: set LIMIT_CHARGE to true to test the charge-hold feature.</li>
+</ul>
+
+<p><strong>Next step:</strong> Add Wi-Fi reporting with the <a href="/guides/esp32-battery-monitor-dashboard.html">ESP32 Battery Monitor Dashboard Guide</a>, and learn how to measure load current with the <a href="/guides/esp32-ina219-power-monitor.html">ESP32 and INA219 Power Monitor Guide</a>.</p>
+
+<h2>Troubleshooting and FAQs</h2>
+
+<h3>Wiring and Hardware Problems</h3>
+
+<p><strong>The battery never charges. What should I check?</strong><br>
+Check battery polarity at the JST connector, confirm the CE pin is LOW (it is pulled low on the Adafruit board by default), and confirm the input source is within the 5V to 10V range. Also check that the CHG LED lights when input power is applied.</p>
+
+<p><strong>The CHG LED turns off. Is the battery full?</strong><br>
+Usually yes. This charger has no separate "done" LED, so when CHG turns off the charge cycle has finished. If CHG flashes at about 2 Hz, that signals a charge timer fault. The sketch reports this as CHARGE FAULT.</p>
+
+<p><strong>The ESP32 resets when I plug or unplug the input.</strong><br>
+The boost converter input is probably dipping. Use short, thick wires, make sure the 470uF capacitor is fitted on the boost output, and confirm the boost is set to 5.0V and rated for the ESP32's Wi-Fi current peaks.</p>
+
+<p><strong>Why not power the ESP32 directly from the OUT pin?</strong><br>
+OUT can be as high as 4.4V and as low as the battery voltage, which is outside what a DevKit's 3.3V regulator handles well. The boost module gives a stable 5V input that the DevKit regulator handles cleanly.</p>
+
+<p><strong>PGOOD or CHG always read the same value.</strong><br>
+Check the diode direction (stripe toward the charger pin), the 10k pull-up to 3V3, and that both signals share a ground with the ESP32.</p>
+
+<p><strong>The battery percentage jumps when I plug in the charger.</strong><br>
+This is expected. Battery voltage rises under charge and drops under load, so the percentage is only an estimate. Use the resting voltage for a better reading.</p>
+
+<h3>Compilation and Upload Errors</h3>
+
+<p><strong>Error: analogReadMilliVolts was not declared in this scope</strong><br>
+Update the ESP32 board package to a recent version in the Boards Manager.</p>
+
+<p><strong>Error: Adafruit_SSD1306.h: No such file or directory</strong><br>
+Install Adafruit SSD1306 and Adafruit GFX Library from the Library Manager, plus Adafruit BusIO if prompted.</p>
+
+<p><strong>Upload stuck on "Connecting........"</strong><br>
+Hold the BOOT button during upload, use a data-capable USB cable, and install the CP210x or CH340 driver for your board.</p>
+
+<h3>Long-Tail Questions</h3>
+
+<p><strong>Can I use a TP4056 instead?</strong><br>
+A TP4056 can charge a cell, but it has no power path. When a load is attached, the charger sees the load current as battery current, so the cell may not terminate properly and is held at full voltage. For a project that runs while charging, a power-path charger is the safer design.</p>
+
+<p><strong>Can I charge and use a lithium battery at the same time?</strong><br>
+Yes, with a power-path charger such as the BQ24074. The load runs from the input power and the remaining current charges the battery.</p>
+
+<p><strong>How do I limit a LiPo battery to 80 percent charge?</strong><br>
+Set LIMIT_CHARGE to true. The firmware drives CE HIGH at the stop voltage, which pauses charging while the system rail stays active, and re-enables charging at the resume voltage.</p>
+
+<p><strong>Can I use a solar panel?</strong><br>
+Yes. The Adafruit board accepts a 6V to 10V solar panel as well as USB or DC input. Check the manufacturer's solar notes for panel preparation.</p>
+
+<p><strong>Can I use this for LiFePO4 cells?</strong><br>
+No. This charger targets 3.7V/4.2V Li-ion and LiPo cells. Use a charger designed for LiFePO4 for those chemistries.</p>
+
+<p><strong>Is it safe to leave charging overnight?</strong><br>
+Only with a protected cell, correct charge current, and after you have tested the build while supervised. Always charge on a non-flammable surface.</p>
+
+<h2>Recommended Parts, Downloads and Related Guides</h2>
+
+<p><em>Affiliate disclosure: some links below may earn Tech Circuit Guide a small commission at no extra cost to you. We only recommend parts we would use ourselves.</em></p>
+
+<h3>Recommended Parts and Tools</h3>
+<ul>
+  <li><a href="/recommends/bq24074-charger-board.html" rel="sponsored noopener">BQ24074 power-path charger board: check price and availability</a></li>
+  <li><a href="/recommends/protected-18650-battery.html" rel="sponsored noopener">Protected 18650 Li-ion cells and holders: see recommended picks</a></li>
+  <li><a href="/recommends/esp32-devkit.html" rel="sponsored noopener">ESP32 DevKit boards: view recommended boards</a></li>
+  <li><a href="/recommends/mt3608-boost-module.html" rel="sponsored noopener">5V boost converter modules: get the MT3608</a></li>
+  <li><a href="/recommends/lipo-safe-charging-bag.html" rel="sponsored noopener">Fire-resistant LiPo charging bag: safer charging</a></li>
+  <li><a href="/recommends/budget-multimeter.html" rel="sponsored noopener">Digital multimeter: best budget picks</a></li>
+</ul>
+
+<h3>Free Download</h3>
+<p><strong>Get the Lithium Charger Wiring and Safety Checklist</strong>, a printable pin map and pre-charge safety list: <a href="/downloads/lithium-charger-wiring-safety-checklist.html">download the checklist</a>.</p>
+
+<h3>Level Up This Project</h3>
+<ul>
+  <li>Add an INA219 to log charge and discharge current in mA.</li>
+  <li>Send battery status to a phone dashboard over Wi-Fi or MQTT.</li>
+  <li>Pair it with a small solar panel for an off-grid sensor node.</li>
+</ul>
+
+<p><strong>Built this project?</strong> Share your result or ask a question in the comments, and subscribe to Tech Circuit Guide for the next power electronics build.</p>
+
+</article>
